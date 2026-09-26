@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="ja" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Font Converter</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans JP', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(156, 163, 175, 0.4);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(107, 114, 128, 0.7);
+        }
+        .style-card {
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+    </style>
+</head>
+<body class="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 min-h-full flex flex-col font-sans antialiased selection:bg-zinc-200 dark:selection:bg-zinc-800">
+
+    <!-- Header -->
+    <header class="border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm sticky top-0 z-30">
+        <div class="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <span class="font-bold text-lg tracking-tight">font<span class="text-zinc-400 font-normal">.convert</span></span>
+            </div>
+
+            <div class="flex items-center space-x-1">
+                <button id="themeToggleBtn" class="w-9 h-9 flex items-center justify-center rounded-md text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors" title="ダークモード切り替え">
+                    <i class="fa-solid fa-moon text-sm dark:hidden"></i>
+                    <i class="fa-solid fa-sun text-sm hidden dark:block"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-5xl w-full mx-auto px-4 py-6 flex flex-col gap-6">
+
+        <!-- Input Area -->
+        <section class="space-y-2">
+            <div class="relative">
+                <textarea 
+                    id="textInput" 
+                    rows="3" 
+                    class="w-full px-4 py-3 text-lg rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 focus:border-transparent transition-all resize-y shadow-sm"
+                    placeholder="abcdefg ABCDEFG 123..."
+                    spellcheck="false"
+                >abcdefg ABCDEFG 123</textarea>
+                
+                <button id="clearBtn" class="absolute right-3 top-3 text-xs text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 font-medium px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 transition-colors hidden">
+                    クリア
+                </button>
+            </div>
+
+            <!-- Quick Preset Tags -->
+            <div class="flex items-center justify-between text-xs text-zinc-500">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="text-zinc-400">例:</span>
+                    <button class="sample-btn hover:underline text-zinc-600 dark:text-zinc-400">Hello World</button>
+                    <span>•</span>
+                    <button class="sample-btn hover:underline text-zinc-600 dark:text-zinc-400">abcdefg ABCDEFG</button>
+                    <span>•</span>
+                    <button class="sample-btn hover:underline text-zinc-600 dark:text-zinc-400">@instagram_user</button>
+                </div>
+                <div class="hidden sm:block text-zinc-400">
+                    <span id="charCount">0</span> 文字
+                </div>
+            </div>
+        </section>
+
+        <!-- Filter Tabs & Search Bar -->
+        <section class="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center pt-2">
+            <!-- Tabs -->
+            <div class="flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-800 overflow-x-auto no-scrollbar pb-1 sm:pb-0" id="categoryTabs">
+                <button data-category="all" class="category-btn text-xs font-medium px-3 py-2 border-b-2 border-zinc-900 dark:border-zinc-100 text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
+                    すべて
+                </button>
+                <button data-category="favorites" class="category-btn text-xs font-medium px-3 py-2 border-b-2 border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 whitespace-nowrap">
+                    お気に入り (<span id="favCount">0</span>)
+                </button>
+                <button data-category="serif" class="category-btn text-xs font-medium px-3 py-2 border-b-2 border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 whitespace-nowrap">
+                    セリフ/太字
+                </button>
+                <button data-category="script" class="category-btn text-xs font-medium px-3 py-2 border-b-2 border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 whitespace-nowrap">
+                    筆記体/カリグラフィ
+                </button>
+                <button data-category="encircled" class="category-btn text-xs font-medium px-3 py-2 border-b-2 border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 whitespace-nowrap">
+                    枠文字/記号
+                </button>
+            </div>
+
+            <!-- Simple Search -->
+            <div class="relative sm:w-48">
+                <input 
+                    type="text" 
+                    id="searchStylesInput" 
+                    placeholder="検索..." 
+                    class="w-full pl-8 pr-3 py-1.5 text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+                >
+                <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 text-xs"></i>
+            </div>
+        </section>
+
+        <!-- Results Grid -->
+        <section id="stylesGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <!-- Dynamic font cards -->
+        </section>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="hidden py-12 text-center text-zinc-400 text-sm">
+            一致するスタイルが見つかりませんでした。
+        </div>
+
+    </main>
+
+    <!-- Minimal Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-12 opacity-0 transition-all duration-200 pointer-events-none flex items-center gap-2 px-3.5 py-2 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 rounded-md shadow-md text-xs font-medium">
+        <i class="fa-solid fa-check text-emerald-400 dark:text-emerald-600"></i>
+        <span id="toastMsg">コピーしました</span>
+    </div>
+
+    <!-- Footer -->
+    <footer class="mt-auto py-4 border-t border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-400">
+        font.convert — Unicode Text Utilities
+    </footer>
+
+    <script>
+        // Unicode Converter Mapping Definitions
+        const STYLES_DATA = [
+            {
+                id: 'bold-italic',
+                name: 'Bold Italic',
+                category: 'serif',
+                fav: false,
+                convert: text => mapUnicode(text, {
+                    upper: 0x1D468, // 𝑨
+                    lower: 0x1D482  // 𝒂
+                })
+            },
+            {
+                id: 'italic',
+                name: 'Italic',
+                category: 'serif',
+                fav: false,
+                convert: text => mapUnicode(text, {
+                    upper: 0x1D434, // 𝐴
+                    lower: 0x1D44E, // 𝑎
+                    lowerExceptions: { 'h': 'ℎ' }
+                })
+            },
+            {
+                id: 'bold',
+                name: 'Bold',
+                category: 'serif',
+                fav: false,
+                convert: text => mapUnicode(text, {
+                    upper: 0x1D400, // 𝐀
+                    lower: 0x1D41A, // 𝐚
+                    digit: 0x1D7CE  // 𝟎
+                })
+            },
+            {
+                id: 'script',
+                name: 'Script',
+                category: 'script',
+                fav: false,
+                convert: text => mapUnicode(text, {
+                    upper: 0x1D49C, // 𝒜
+                    lower: 0x1D4B6, // 𝒶
+                    upperExceptions: {
+                        'B': 'ℬ', 'E': 'ℰ', 'F': 'ℱ', 'H': 'ℋ', 'I': 'ℐ',
+                        'L': 'ℒ', 'M': 'ℳ', 'R': 'ℛ'
+                    },
+                    lowerExceptions: {
+                        'e': 'ℯ', 'g': 'ℊ', 'o': 'ℴ'
+                    }
+                })
+            },
+            {
+                id: 'bold-script',
+                name: 'Bold Script',
+                category: 'script',
+                fav: false,
+                convert: text => mapUnicode(text, {
+                    upper: 0x1D4D0, // 𝓐
+                    lower: 0x1D4EA  // 𝓪
+                })
+            },
+            {
+                id: 'fraktur',
+                name: 'Fraktur / Gothic',
+                category: 'script',
+                fav: false,
+                convert: text => mapUnicode(text, {
+                    upper: 0x1D504, // 𝔄
+                    lower: 0x1D51E, // 𝔞
+                    upperExceptions: {
+                        'C': 'ℭ', 'H': 'ℌ', 'I': 'ℑ', 'R': 'ℜ', 'Z': 'ℨ'
+                    }
+                })
+            },
+            {
+                id: 'bold-fraktur',
+                name: 'Bold Fraktur',
+                category: 'script',
+                fav: false,
+                convert: text => mapUnicode(text, {
+                    upper: 0x1D56C, // 𝕬
+                    lower: 0x1D586  // 𝖆
+                })
+            },
+            {
+                id: 'double-struck',
+                name: 'Double-Struck (Blackboard)',
+                category: 'encircled',
+                fav: false,
+                convert: text => mapUnicode(text, {
+                    upper: 0x1D538, // 𝔸
+                    lower: 0x1D552, // 𝕒
+                    digit: 0x1D7D8, // 𝟙
+                    upperExceptions: {
+                        'C': 'ℂ', 'H': 'ℍ', 'N': 'ℕ', 'P': 'ℙ', 'Q': 'ℚ', 'R': 'ℝ', 'Z': 'ℤ'
+                    }
+                })
+            },
+            {
+                id: 'sans-serif',
+                name: 'Sans-Serif',
+                category: 'serif',
+                fav: false,
+                convert: text => mapUnicode(text, {
+                    upper: 0x1D5A0, // 𝖠
+                    lower: 0x1D5BA, // 𝖺
+                    digit: 0x1D7E2  // 𝟢
+                })
+            },
+            {
+                id: 'sans-bold',
+                name: 'Sans-Serif Bold',
+                category: 'serif',
+                fav: false,
+                convert: text => mapUnicode(text, {
+                    upper: 0x1D5D4, // 𝐀
+                    lower: 0x1D5EE, // 𝐚
+                    digit: 0x1D7EC  // 𝟎
+                })
+            },
+            {
+                id: 'monospace',
+                name: 'Monospace',
+                category: 'serif',
+                fav: false,
+                convert: text => mapUnicode(text, {
+                    upper: 0x1D670, // 𝙰
+                    lower: 0x1D68A, // 𝚊
+                    digit: 0x1D7F6  // 𝟶
+                })
+            },
+            {
+                id: 'circled-light',
+                name: 'Circled',
+                category: 'encircled',
+                fav: false,
+                convert: text => convertCircled(text)
+            },
+            {
+                id: 'circled-dark',
+                name: 'Circled Dark',
+                category: 'encircled',
+                fav: false,
+                convert: text => convertCircledDark(text)
+            },
+            {
+                id: 'squared-dark',
+                name: 'Squared Dark',
+                category: 'encircled',
+                fav: false,
+                convert: text => convertSquaredDark(text)
+            },
+            {
+                id: 'fullwidth',
+                name: 'Fullwidth',
+                category: 'encircled',
+                fav: false,
+                convert: text => convertFullwidth(text)
+            },
+            {
+                id: 'small-caps',
+                name: 'Small Caps',
+                category: 'serif',
+                fav: false,
+                convert: text => convertSmallCaps(text)
+            },
+            {
+                id: 'underline',
+                name: 'Underline',
+                category: 'encircled',
+                fav: false,
+                convert: text => text.split('').map(c => c === ' ' ? ' ' : c + '\u0332').join('')
+            },
+            {
+                id: 'strikethrough',
+                name: 'Strikethrough',
+                category: 'encircled',
+                fav: false,
+                convert: text => text.split('').map(c => c === ' ' ? ' ' : c + '\u0336').join('')
+            },
+            {
+                id: 'upside-down',
+                name: 'Upside Down',
+                category: 'encircled',
+                fav: false,
+                convert: text => convertUpsideDown(text)
+            }
+        ];
+
+        function mapUnicode(str, config) {
+            let res = '';
+            for (let i = 0; i < str.length; i++) {
+                const char = str[i];
+                const code = char.charCodeAt(0);
+
+                if (code >= 65 && code <= 90) { // A-Z
+                    if (config.upperExceptions && config.upperExceptions[char]) {
+                        res += config.upperExceptions[char];
+                    } else if (config.upper) {
+                        res += String.fromCodePoint(config.upper + (code - 65));
+                    } else {
+                        res += char;
+                    }
+                } else if (code >= 97 && code <= 122) { // a-z
+                    if (config.lowerExceptions && config.lowerExceptions[char]) {
+                        res += config.lowerExceptions[char];
+                    } else if (config.lower) {
+                        res += String.fromCodePoint(config.lower + (code - 97));
+                    } else {
+                        res += char;
+                    }
+                } else if (code >= 48 && code <= 57) { // 0-9
+                    if (config.digit) {
+                        res += String.fromCodePoint(config.digit + (code - 48));
+                    } else {
+                        res += char;
+                    }
+                } else {
+                    res += char;
+                }
+            }
+            return res;
+        }
+
+        function convertCircled(str) {
+            let res = '';
+            for (let char of str) {
+                const code = char.charCodeAt(0);
+                if (code >= 65 && code <= 90) res += String.fromCodePoint(0x24B6 + (code - 65));
+                else if (code >= 97 && code <= 122) res += String.fromCodePoint(0x24D0 + (code - 97));
+                else if (code >= 49 && code <= 57) res += String.fromCodePoint(0x2460 + (code - 49));
+                else if (code === 48) res += '⓪';
+                else res += char;
+            }
+            return res;
+        }
+
+        function convertCircledDark(str) {
+            let res = '';
+            for (let char of str) {
+                const code = char.charCodeAt(0);
+                if (code >= 65 && code <= 90) res += String.fromCodePoint(0x1F150 + (code - 65));
+                else if (code >= 97 && code <= 122) res += String.fromCodePoint(0x1F150 + (code - 97));
+                else if (code >= 49 && code <= 57) res += String.fromCodePoint(0x2776 + (code - 49));
+                else if (code === 48) res += '⓿';
+                else res += char;
+            }
+            return res;
+        }
+
+        function convertSquaredDark(str) {
+            let res = '';
+            for (let char of str) {
+                const code = char.charCodeAt(0);
+                if (code >= 65 && code <= 90) res += String.fromCodePoint(0x1F130 + (code - 65));
+                else if (code >= 97 && code <= 122) res += String.fromCodePoint(0x1F130 + (code - 97));
+                else res += char;
+            }
+            return res;
+        }
+
+        function convertFullwidth(str) {
+            let res = '';
+            for (let char of str) {
+                const code = char.charCodeAt(0);
+                if (code >= 33 && code <= 126) res += String.fromCharCode(code + 0xFEE0);
+                else if (code === 32) res += '\u3000';
+                else res += char;
+            }
+            return res;
+        }
+
+        function convertSmallCaps(str) {
+            const map = {
+                'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ꜰ', 'g': 'ɢ',
+                'h': 'ʜ', 'i': 'ɪ', 'j': 'ᴊ', 'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ',
+                'o': 'ᴏ', 'p': 'ᴘ', 'q': 'ꞯ', 'r': 'ʀ', 's': 'ꜱ', 't': 'ᴛ', 'u': 'ᴜ',
+                'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x', 'y': 'ʏ', 'z': 'ᴢ'
+            };
+            return str.split('').map(c => map[c.toLowerCase()] || c).join('');
+        }
+
+        function convertUpsideDown(str) {
+            const map = {
+                'a': 'ɐ', 'b': 'q', 'c': 'ɔ', 'd': 'p', 'e': 'ǝ', 'f': 'ɟ', 'g': 'ƃ',
+                'h': 'ɥ', 'i': 'ı', 'j': 'ɾ', 'k': 'ʞ', 'l': 'l', 'm': 'ɯ', 'n': 'u',
+                'o': 'o', 'p': 'd', 'q': 'b', 'r': 'ɹ', 's': 's', 't': 'ʇ', 'u': 'n',
+                'v': 'ʌ', 'w': 'ʍ', 'x': 'x', 'y': 'ʎ', 'z': 'z',
+                'A': '∀', 'B': '𐐒', 'C': 'Ɔ', 'D': '◖', 'E': 'Ǝ', 'F': 'Ⅎ', 'G': '⅁',
+                'H': 'H', 'I': 'I', 'J': 'ſ', 'K': 'ʞ', 'L': 'Ꞁ', 'M': 'W', 'N': 'N',
+                'O': 'O', 'P': 'Ԁ', 'Q': 'Ò', 'R': 'ᴚ', 'S': 'S', 'T': '┴', 'U': '∩',
+                'V': 'Λ', 'W': 'M', 'X': 'X', 'Y': '⅄', 'Z': 'Z'
+            };
+            return str.split('').reverse().map(c => map[c] || c).join('');
+        }
+
+        let currentText = 'abcdefg ABCDEFG 123';
+        let currentCategory = 'all';
+        let searchQuery = '';
+        let favorites = JSON.parse(localStorage.getItem('unicode_font_favs') || '[]');
+
+        STYLES_DATA.forEach(s => {
+            s.fav = favorites.includes(s.id);
+        });
+
+        const textInput = document.getElementById('textInput');
+        const stylesGrid = document.getElementById('stylesGrid');
+        const emptyState = document.getElementById('emptyState');
+        const charCountEl = document.getElementById('charCount');
+        const clearBtn = document.getElementById('clearBtn');
+        const favCountEl = document.getElementById('favCount');
+        const searchInput = document.getElementById('searchStylesInput');
+        const categoryTabs = document.getElementById('categoryTabs');
+        const toast = document.getElementById('toast');
+        const toastMsg = document.getElementById('toastMsg');
+        const themeToggleBtn = document.getElementById('themeToggleBtn');
+
+        // Dark mode auto-detect or manual toggle
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+
+        themeToggleBtn.addEventListener('click', () => {
+            document.documentElement.classList.toggle('dark');
+        });
+
+        textInput.addEventListener('input', (e) => {
+            currentText = e.target.value;
+            updateCounts();
+            renderCards();
+        });
+
+        document.querySelectorAll('.sample-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                textInput.value = btn.innerText.trim();
+                currentText = textInput.value;
+                updateCounts();
+                renderCards();
+            });
+        });
+
+        clearBtn.addEventListener('click', () => {
+            textInput.value = '';
+            currentText = '';
+            updateCounts();
+            renderCards();
+            textInput.focus();
+        });
+
+        searchInput.addEventListener('input', (e) => {
+            searchQuery = e.target.value.toLowerCase().trim();
+            renderCards();
+        });
+
+        categoryTabs.addEventListener('click', (e) => {
+            const btn = e.target.closest('.category-btn');
+            if (!btn) return;
+
+            document.querySelectorAll('.category-btn').forEach(b => {
+                b.classList.remove('border-zinc-900', 'dark:border-zinc-100', 'text-zinc-900', 'dark:text-zinc-100');
+                b.classList.add('border-transparent', 'text-zinc-500');
+            });
+
+            btn.classList.remove('border-transparent', 'text-zinc-500');
+            btn.classList.add('border-zinc-900', 'dark:border-zinc-100', 'text-zinc-900', 'dark:text-zinc-100');
+
+            currentCategory = btn.dataset.category;
+            renderCards();
+        });
+
+        function updateCounts() {
+            const chars = currentText.length;
+            charCountEl.innerText = chars;
+
+            if (chars > 0) {
+                clearBtn.classList.remove('hidden');
+            } else {
+                clearBtn.classList.add('hidden');
+            }
+
+            favCountEl.innerText = favorites.length;
+        }
+
+        let toastTimeout;
+        function showToast(msg) {
+            toastMsg.innerText = msg;
+            toast.classList.remove('translate-y-12', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-12', 'opacity-0');
+            }, 1800);
+        }
+
+        function copyToClipboard(text) {
+            if (!text) return;
+
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+
+            try {
+                document.execCommand('copy');
+                showToast('コピーしました');
+            } catch (err) {
+                showToast('コピーに失敗しました');
+            } finally {
+                document.body.removeChild(textarea);
+            }
+        }
+
+        function toggleFavorite(id) {
+            const item = STYLES_DATA.find(s => s.id === id);
+            if (!item) return;
+
+            item.fav = !item.fav;
+            if (item.fav) {
+                if (!favorites.includes(id)) favorites.push(id);
+            } else {
+                favorites = favorites.filter(favId => favId !== id);
+            }
+
+            localStorage.setItem('unicode_font_favs', JSON.stringify(favorites));
+            favCountEl.innerText = favorites.length;
+            renderCards();
+        }
+
+        function renderCards() {
+            stylesGrid.innerHTML = '';
+
+            let filteredStyles = STYLES_DATA.filter(style => {
+                if (currentCategory === 'favorites' && !style.fav) return false;
+                if (currentCategory !== 'all' && currentCategory !== 'favorites' && style.category !== currentCategory) return false;
+
+                if (searchQuery) {
+                    const matchName = style.name.toLowerCase().includes(searchQuery);
+                    const matchConverted = style.convert(currentText || 'sample').toLowerCase().includes(searchQuery);
+                    if (!matchName && !matchConverted) return false;
+                }
+
+                return true;
+            });
+
+            if (currentCategory === 'all') {
+                filteredStyles.sort((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0));
+            }
+
+            if (filteredStyles.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+            }
+
+            filteredStyles.forEach(style => {
+                const convertedText = currentText ? style.convert(currentText) : style.convert('abcdefg ABCDEFG 123');
+
+                const card = document.createElement('div');
+                card.className = `style-card bg-white dark:bg-zinc-900 rounded-md p-3.5 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-600 flex flex-col justify-between gap-2.5`;
+
+                card.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-medium text-zinc-400 dark:text-zinc-500">
+                            ${style.name}
+                        </span>
+                        <button 
+                            onclick="toggleFavorite('${style.id}')" 
+                            class="text-zinc-300 dark:text-zinc-700 hover:text-amber-400 dark:hover:text-amber-400 transition-colors p-1"
+                        >
+                            <i class="fa-${style.fav ? 'solid' : 'regular'} fa-star text-xs ${style.fav ? 'text-amber-400 dark:text-amber-400' : ''}"></i>
+                        </button>
+                    </div>
+
+                    <div class="my-1 overflow-x-auto">
+                        <div class="text-xl text-zinc-900 dark:text-zinc-100 break-words font-normal select-all">
+                            ${escapeHtml(convertedText)}
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end items-center pt-1">
+                        <button 
+                            onclick="copyToClipboard('${escapeJsString(convertedText)}')"
+                            class="px-2.5 py-1 rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-medium flex items-center gap-1.5 transition-colors active:scale-95"
+                        >
+                            <i class="fa-regular fa-copy text-zinc-400"></i>
+                            コピー
+                        </button>
+                    </div>
+                `;
+
+                stylesGrid.appendChild(card);
+            });
+        }
+
+        function escapeHtml(str) {
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function escapeJsString(str) {
+            return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n');
+        }
+
+        window.onload = function() {
+            updateCounts();
+            renderCards();
+        };
+    </script>
+</body>
+</html>
