@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SNS Post JSON Analyzer</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    /* カスタムスクロールバー */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-50 text-slate-900">
+
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="p-2 bg-slate-900 text-white rounded-md">
+          <i data-lucide="bar-chart-2" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-slate-900 text-base leading-tight">Post Analyzer</h1>
+          <p class="text-xs text-slate-500">SNSポスト（投稿）データ構造解析・パフォーマンス分析</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="demoBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-md transition-colors shadow-sm">
+          <i data-lucide="file-text" class="w-3.5 h-3.5 text-slate-500"></i>
+          サンプルデータを読み込む
+        </button>
+        <button id="exportCsvBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm" disabled>
+          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+          CSV出力
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- File Upload Zone -->
+    <div id="dropZone" class="border border-dashed border-slate-300 hover:border-slate-400 bg-white rounded-lg p-6 text-center transition-colors cursor-pointer relative group shadow-sm">
+      <input type="file" id="fileInput" accept=".json" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+      <div class="max-w-md mx-auto flex flex-col items-center gap-2">
+        <div class="p-2.5 bg-slate-100 text-slate-600 rounded-full group-hover:bg-slate-200 transition-colors">
+          <i data-lucide="upload" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <p class="text-xs font-semibold text-slate-800">JSONファイルをドラッグ＆ドロップ または 選択</p>
+          <p class="text-[11px] text-slate-500 mt-0.5">
+            配列形式 <code class="px-1 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px]">[ { "id": "...", "text": "...", "likeCount": 3 } ]</code> をサポート
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alert / Toast Container -->
+    <div id="alertBox" class="hidden p-3.5 rounded-md bg-red-50 border border-red-200 text-red-700 text-xs flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="alert-circle" class="w-4 h-4 shrink-0 text-red-600"></i>
+        <span id="alertMessage">エラーが発生しました</span>
+      </div>
+      <button onclick="document.getElementById('alertBox').classList.add('hidden')" class="text-red-500 hover:text-red-700">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <!-- Dashboard Metrics (4 Grid Cards) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-500 mb-1">
+          <span class="text-xs font-medium text-slate-500">総ポスト数</span>
+          <i data-lucide="file-text" class="w-4 h-4 text-slate-400"></i>
+        </div>
+        <div class="flex items-baseline justify-between">
+          <span id="statPostCount" class="text-2xl font-bold text-slate-900 tracking-tight">0</span>
+          <span class="text-xs text-slate-400">件</span>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-500 mb-1">
+          <span class="text-xs font-medium text-slate-500">総いいね数</span>
+          <i data-lucide="heart" class="w-4 h-4 text-slate-400"></i>
+        </div>
+        <div class="flex items-baseline justify-between">
+          <span id="statTotalLikes" class="text-2xl font-bold text-slate-900 tracking-tight">0</span>
+          <span class="text-xs text-slate-400">いいね</span>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-500 mb-1">
+          <span class="text-xs font-medium text-slate-500">平均いいね数</span>
+          <i data-lucide="trending-up" class="w-4 h-4 text-slate-400"></i>
+        </div>
+        <div class="flex items-baseline justify-between">
+          <span id="statAvgLikes" class="text-2xl font-bold text-slate-900 tracking-tight">0</span>
+          <span class="text-xs text-slate-400">/ Post</span>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-500 mb-1">
+          <span class="text-xs font-medium text-slate-500">リポスト / 返信 合計</span>
+          <i data-lucide="repeat" class="w-4 h-4 text-slate-400"></i>
+        </div>
+        <div class="flex items-baseline justify-between">
+          <span class="text-2xl font-bold text-slate-900 tracking-tight"><span id="statTotalRetweets">0</span> <span class="text-sm font-normal text-slate-400">/</span> <span id="statTotalReplies">0</span></span>
+          <span class="text-xs text-slate-400">(RP / 返信)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm lg:col-span-2">
+        <h2 class="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+          <i data-lucide="bar-chart" class="w-3.5 h-3.5 text-slate-400"></i>
+          上位ポストのエンゲージメント比較 (いいね・リポスト)
+        </h2>
+        <div class="relative h-60">
+          <canvas id="postsChart"></canvas>
+        </div>
+      </div>
+
+      <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+        <h2 class="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+          <i data-lucide="pie-chart" class="w-3.5 h-3.5 text-slate-400"></i>
+          テキスト・エンゲージメントハイライト
+        </h2>
+        <div class="space-y-3">
+          <div class="p-3 bg-slate-50 rounded border border-slate-200/60">
+            <span class="text-xs text-slate-500 font-medium">平均テキスト長</span>
+            <div id="statAvgCharLength" class="text-base font-bold text-slate-800 mt-0.5">0 文字</div>
+          </div>
+          <div class="p-3 bg-slate-50 rounded border border-slate-200/60">
+            <span class="text-xs text-slate-500 font-medium">最多いいね獲得ポスト</span>
+            <div id="statMaxLikeCount" class="text-base font-bold text-slate-900 mt-0.5">0 いいね</div>
+          </div>
+          <div class="p-3 bg-slate-50 rounded border border-slate-200/60">
+            <span class="text-xs text-slate-500 font-medium">最多リポスト獲得</span>
+            <div id="statMaxRetweetCount" class="text-base font-bold text-slate-900 mt-0.5">0 リポスト</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table Card -->
+    <div class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+      <!-- Search & Controls Header -->
+      <div class="p-3.5 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div class="relative flex-1 w-full sm:w-auto">
+          <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+          <input type="text" id="searchInput" placeholder="ポスト本文で絞り込み..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 focus:border-slate-500">
+        </div>
+
+        <div class="flex items-center gap-2 w-full sm:w-auto">
+          <select id="sortSelect" class="py-1.5 px-3 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 text-slate-700 w-full sm:w-auto">
+            <option value="likes_desc" selected>いいね数（多い順）</option>
+            <option value="likes_asc">いいね数（少ない順）</option>
+            <option value="date_desc">投稿日時（新しい順）</option>
+            <option value="date_asc">投稿日時（古い順）</option>
+            <option value="retweets_desc">リポスト数（多い順）</option>
+            <option value="length_desc">文字数（多い順）</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Posts Table -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
+              <th class="py-2.5 px-4 w-1/2">本文</th>
+              <th class="py-2.5 px-4 whitespace-nowrap">投稿日時</th>
+              <th class="py-2.5 px-4 text-center whitespace-nowrap">いいね</th>
+              <th class="py-2.5 px-4 text-center whitespace-nowrap">リポスト</th>
+              <th class="py-2.5 px-4 text-center whitespace-nowrap">返信</th>
+              <th class="py-2.5 px-4 text-center whitespace-nowrap">文字数</th>
+            </tr>
+          </thead>
+          <tbody id="postsTableBody" class="divide-y divide-slate-100 text-slate-700">
+            <tr>
+              <td colspan="6" class="py-10 text-center text-slate-400">
+                JSONファイルを読み込むとここにポスト分析データが表示されます
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination Footer -->
+      <div class="p-3 border-t border-slate-200 bg-slate-50/50 flex items-center justify-between text-xs text-slate-500">
+        <span id="pageInfo">0 件中 0 - 0 件を表示</span>
+        <div class="flex items-center gap-1">
+          <button id="prevPageBtn" class="px-2.5 py-1 border border-slate-300 rounded bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">前へ</button>
+          <button id="nextPageBtn" class="px-2.5 py-1 border border-slate-300 rounded bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">次へ</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // App State
+    let rawPostsData = [];
+    let analyzedPosts = [];
+    let filteredPosts = [];
+
+    let currentPage = 1;
+    const pageSize = 30;
+
+    let postsChartInstance = null;
+
+    // Elements
+    const fileInput = document.getElementById('fileInput');
+    const alertBox = document.getElementById('alertBox');
+    const alertMessage = document.getElementById('alertMessage');
+    const postsTableBody = document.getElementById('postsTableBody');
+    const searchInput = document.getElementById('searchInput');
+    const sortSelect = document.getElementById('sortSelect');
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    const demoBtn = document.getElementById('demoBtn');
+
+    // Init Lucide Icons
+    lucide.createIcons();
+
+    // Event Listeners
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) readFile(file);
+    });
+
+    demoBtn.addEventListener('click', loadDemoData);
+    searchInput.addEventListener('input', applyFiltersAndSort);
+    sortSelect.addEventListener('change', applyFiltersAndSort);
+    exportCsvBtn.addEventListener('click', exportToCSV);
+
+    document.getElementById('prevPageBtn').addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        renderTable();
+      }
+    });
+
+    document.getElementById('nextPageBtn').addEventListener('click', () => {
+      if (currentPage * pageSize < filteredPosts.length) {
+        currentPage++;
+        renderTable();
+      }
+    });
+
+    // File Read
+    function readFile(file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const json = JSON.parse(event.target.result);
+          processJSONData(json);
+          showAlert('', false);
+        } catch (err) {
+          showAlert('JSONファイルのパースに失敗しました。正しい構文か確認してください。');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // Process JSON
+    function processJSONData(data) {
+      if (!data) {
+        showAlert('データが空です。');
+        return;
+      }
+
+      // Handle array vs object wrapper
+      let postsList = [];
+      if (Array.isArray(data)) {
+        postsList = data;
+      } else if (typeof data === 'object' && Array.isArray(data.posts)) {
+        postsList = data.posts;
+      } else {
+        showAlert('有効なポストデータ配列が見つかりませんでした。');
+        return;
+      }
+
+      rawPostsData = postsList;
+
+      analyzedPosts = postsList.map(post => ({
+        id: post.id || Math.random().toString(),
+        text: post.text || '',
+        createdAt: post.createdAt ? new Date(post.createdAt) : null,
+        likeCount: Number(post.likeCount || 0),
+        retweetCount: Number(post.retweetCount || 0),
+        replyCount: Number(post.replyCount || 0),
+        length: (post.text || '').length
+      }));
+
+      exportCsvBtn.disabled = analyzedPosts.length === 0;
+
+      updateStats();
+      renderChart();
+      applyFiltersAndSort();
+    }
+
+    // Update Top Dashboard Cards
+    function updateStats() {
+      const count = analyzedPosts.length;
+      if (count === 0) {
+        document.getElementById('statPostCount').textContent = '0';
+        document.getElementById('statTotalLikes').textContent = '0';
+        document.getElementById('statAvgLikes').textContent = '0';
+        document.getElementById('statTotalRetweets').textContent = '0';
+        document.getElementById('statTotalReplies').textContent = '0';
+        document.getElementById('statAvgCharLength').textContent = '0 文字';
+        document.getElementById('statMaxLikeCount').textContent = '0 いいね';
+        document.getElementById('statMaxRetweetCount').textContent = '0 リポスト';
+        return;
+      }
+
+      const totalLikes = analyzedPosts.reduce((acc, p) => acc + p.likeCount, 0);
+      const totalRetweets = analyzedPosts.reduce((acc, p) => acc + p.retweetCount, 0);
+      const totalReplies = analyzedPosts.reduce((acc, p) => acc + p.replyCount, 0);
+      const totalLength = analyzedPosts.reduce((acc, p) => acc + p.length, 0);
+      
+      const maxLikes = Math.max(...analyzedPosts.map(p => p.likeCount));
+      const maxRetweets = Math.max(...analyzedPosts.map(p => p.retweetCount));
+
+      const avgLikes = (totalLikes / count).toFixed(1);
+      const avgLength = Math.round(totalLength / count);
+
+      document.getElementById('statPostCount').textContent = count.toLocaleString();
+      document.getElementById('statTotalLikes').textContent = totalLikes.toLocaleString();
+      document.getElementById('statAvgLikes').textContent = avgLikes;
+      document.getElementById('statTotalRetweets').textContent = totalRetweets.toLocaleString();
+      document.getElementById('statTotalReplies').textContent = totalReplies.toLocaleString();
+      document.getElementById('statAvgCharLength').textContent = `${avgLength} 文字`;
+      document.getElementById('statMaxLikeCount').textContent = `${maxLikes.toLocaleString()} いいね`;
+      document.getElementById('statMaxRetweetCount').textContent = `${maxRetweets.toLocaleString()} RP`;
+    }
+
+    // Apply Filter and Sort
+    function applyFiltersAndSort() {
+      const query = searchInput.value.toLowerCase().trim();
+      const sortVal = sortSelect.value;
+
+      filteredPosts = analyzedPosts.filter(p => {
+        return !query || p.text.toLowerCase().includes(query);
+      });
+
+      filteredPosts.sort((a, b) => {
+        switch (sortVal) {
+          case 'likes_desc': return b.likeCount - a.likeCount;
+          case 'likes_asc': return a.likeCount - b.likeCount;
+          case 'date_desc': return (b.createdAt || 0) - (a.createdAt || 0);
+          case 'date_asc': return (a.createdAt || 0) - (b.createdAt || 0);
+          case 'retweets_desc': return b.retweetCount - a.retweetCount;
+          case 'length_desc': return b.length - a.length;
+          default: return 0;
+        }
+      });
+
+      currentPage = 1;
+      renderTable();
+    }
+
+    // Render Table
+    function renderTable() {
+      postsTableBody.innerHTML = '';
+
+      if (filteredPosts.length === 0) {
+        postsTableBody.innerHTML = `
+          <tr>
+            <td colspan="6" class="py-12 text-center text-slate-400">
+              該当するポストが見つかりません
+            </td>
+          </tr>
+        `;
+        document.getElementById('pageInfo').textContent = '0 件中 0 - 0 件を表示';
+        document.getElementById('prevPageBtn').disabled = true;
+        document.getElementById('nextPageBtn').disabled = true;
+        return;
+      }
+
+      const startIndex = (currentPage - 1) * pageSize;
+      const endIndex = Math.min(startIndex + pageSize, filteredPosts.length);
+      const pageData = filteredPosts.slice(startIndex, endIndex);
+
+      pageData.forEach(post => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 transition-colors';
+
+        tr.innerHTML = `
+          <td class="py-3 px-4 text-slate-900 whitespace-pre-wrap leading-relaxed">${escapeHtml(post.text)}</td>
+          <td class="py-3 px-4 text-slate-500 whitespace-nowrap">${post.createdAt ? formatDate(post.createdAt) : '-'}</td>
+          <td class="py-3 px-4 text-center font-semibold text-rose-600 whitespace-nowrap">${post.likeCount.toLocaleString()}</td>
+          <td class="py-3 px-4 text-center text-slate-600 whitespace-nowrap">${post.retweetCount.toLocaleString()}</td>
+          <td class="py-3 px-4 text-center text-slate-600 whitespace-nowrap">${post.replyCount.toLocaleString()}</td>
+          <td class="py-3 px-4 text-center text-slate-400 whitespace-nowrap">${post.length}</td>
+        `;
+
+        postsTableBody.appendChild(tr);
+      });
+
+      document.getElementById('pageInfo').textContent = `${filteredPosts.length.toLocaleString()} 件中 ${startIndex + 1} - ${endIndex} 件を表示`;
+      document.getElementById('prevPageBtn').disabled = currentPage === 1;
+      document.getElementById('nextPageBtn').disabled = endIndex >= filteredPosts.length;
+    }
+
+    // Render Bar Chart
+    function renderChart() {
+      const postsCtx = document.getElementById('postsChart').getContext('2d');
+      if (postsChartInstance) postsChartInstance.destroy();
+
+      if (analyzedPosts.length === 0) return;
+
+      // Display top 10 posts sorted by likeCount for chart
+      const chartTopPosts = [...analyzedPosts].sort((a,b) => b.likeCount - a.likeCount).slice(0, 10);
+      const labels = chartTopPosts.map((p, index) => `#${index + 1} (${p.text.slice(0, 8)}...)`);
+      const likesData = chartTopPosts.map(p => p.likeCount);
+      const retweetsData = chartTopPosts.map(p => p.retweetCount);
+
+      postsChartInstance = new Chart(postsCtx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'いいね数',
+              data: likesData,
+              backgroundColor: '#475569',
+              borderRadius: 3
+            },
+            {
+              label: 'リポスト数',
+              data: retweetsData,
+              backgroundColor: '#94a3b8',
+              borderRadius: 3
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top', align: 'end', labels: { boxWidth: 10, font: { size: 11 } } }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#64748b' } },
+            y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, color: '#64748b' } }
+          }
+        }
+      });
+    }
+
+    // Export CSV
+    function exportToCSV() {
+      if (filteredPosts.length === 0) return;
+
+      const headers = ['ID', 'Text', 'CreatedAt', 'LikeCount', 'RetweetCount', 'ReplyCount', 'Length'];
+      const rows = filteredPosts.map(p => [
+        `"${p.id}"`,
+        `"${p.text.replace(/"/g, '""')}"`,
+        p.createdAt ? `"${p.createdAt.toISOString()}"` : '""',
+        p.likeCount,
+        p.retweetCount,
+        p.replyCount,
+        p.length
+      ]);
+
+      const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `sns_posts_analysis_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // Helpers
+    function formatDate(dateObj) {
+      if (!dateObj || isNaN(dateObj)) return '-';
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const d = String(dateObj.getDate()).padStart(2, '0');
+      const hh = String(dateObj.getHours()).padStart(2, '0');
+      const mm = String(dateObj.getMinutes()).padStart(2, '0');
+      return `${y}/${m}/${d} ${hh}:${mm}`;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function showAlert(msg, show = true) {
+      if (show) {
+        alertMessage.textContent = msg;
+        alertBox.classList.remove('hidden');
+      } else {
+        alertBox.classList.add('hidden');
+      }
+    }
+
+    // Sample Demo Loader
+    function loadDemoData() {
+      const demoData = [
+        {
+          "id": "2091167642902595212",
+          "text": "リアルどころか𝕏でも嫌われる伝説の人の逃げ場をやっと見つけられた\n\n編集できるの神かよ",
+          "createdAt": "2026-08-22T14:16:32.739Z",
+          "likeCount": 3,
+          "retweetCount": 0,
+          "replyCount": 0
+        },
+        {
+          "id": "2091169290332931819",
+          "text": "らららーん♪",
+          "createdAt": "2026-08-22T14:23:05.517Z",
+          "likeCount": 2,
+          "retweetCount": 0,
+          "replyCount": 0
+        },
+        {
+          "id": "2091170920096859946",
+          "text": "ヴィヴォオオオオオオオオオオオオオオ",
+          "createdAt": "2026-08-22T14:29:34.083Z",
+          "likeCount": 1,
+          "retweetCount": 0,
+          "replyCount": 0
+        },
+        {
+          "id": "2091171823533164338",
+          "text": "認証済みマークの反対に嫌われ済みマーク(？)みたいなのないのかな",
+          "createdAt": "2026-08-22T14:33:09.478Z",
+          "likeCount": 5,
+          "retweetCount": 2,
+          "replyCount": 0
+        }
+      ];
+      processJSONData(demoData);
+    }
+
+    // Load sample automatically on boot
+    window.addEventListener('DOMContentLoaded', () => {
+      loadDemoData();
+    });
+  </script>
+</body>
+</html>
