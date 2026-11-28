@@ -63,6 +63,12 @@
       background-clip: text;
       color: transparent;
     }
+    #feed-status {
+      text-align: center;
+      padding: 14px 0;
+      font-size: small;
+      color: #666666;
+    }
   </style>
 </head>
 <body bgcolor="#eeeeee" text="#000000">
@@ -117,9 +123,6 @@
       <input type="text" id="post-input" maxlength="20" size="30" placeholder="20文字まで" autocomplete="off" required>
       <button type="submit" id="post-btn">失言する</button>
       <small id="char-count">(0/20)</small>
-      <div style="margin-top: 4px;">
-        <small style="color: #555555;"></small>
-      </div>
       <div id="post-error" style="color: red; font-size: small;"></div>
     </form>
   </div>
@@ -131,9 +134,12 @@
 
   <!-- 投稿一覧エリア -->
   <div id="feed">読み込み中...</div>
+  <div id="feed-status"></div>
 
   <script>
-
+    // ==========================================
+    // ★ここを自分のSupabaseのURLとAnon Keyに書き換えてね
+    // ==========================================
     const SUPABASE_URL = 'https://zmpdkrenhkkklpdzidsr.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_GxAg9kYupXy2RKPLi5N3ng_BE64y_Sg';
 
@@ -141,6 +147,7 @@
     const IS_MAINTENANCE = false;
     const MAINTENANCE_MESSAGE = 'メンテナンスを実施しています。再開までしばらくお待ちください。';
 
+    const PAGE_SIZE = 30;
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     let currentUser = null;
@@ -151,8 +158,14 @@
     let userCache = new Map();
     let postCache = new Map();
     let activeRoute = { type: 'feed', userId: null };
-    let composeTarget = null; // { mode: 'reply' | 'quote', post: {...} }
+    let composeTarget = null;
     let maintenanceActive = IS_MAINTENANCE;
+
+    // 無限スクロール用の状態管理
+    let oldestPostId = null;
+    let isLoadingMore = false;
+    let hasMorePosts = true;
+    let routeToken = 0;
 
     const meBar = document.getElementById('me-bar');
     const maintenancePanel = document.getElementById('maintenance-panel');
@@ -172,17 +185,19 @@
     const charCount = document.getElementById('char-count');
     const viewHeader = document.getElementById('view-header');
     const feed = document.getElementById('feed');
+    const feedStatus = document.getElementById('feed-status');
 
     maintenanceReloadBtn.addEventListener('click', () => location.reload());
 
     function enterMaintenanceMode(reasonText) {
       maintenanceActive = true;
+      hasMorePosts = false;
       maintenancePanel.style.display = 'block';
       maintenanceReason.textContent = reasonText || MAINTENANCE_MESSAGE;
       composer.style.display = 'none';
+      feedStatus.textContent = '';
     }
 
-    // DBの権限剥奪(revoke)やAPI遮断(Exposed schemas削除/Pause)を検知
     function isMaintenanceError(error) {
       if (!error) return false;
       const code = String(error.code || '');
@@ -215,7 +230,7 @@
       return span;
     }
 
-    // 安全なミニ書式パーサー（XSS・レイアウト破壊を完全防止）
+    // 安全なミニ書式パーサー
     function renderFormattedText(text) {
       const frag = document.createDocumentFragment();
       if (!text) return frag;
@@ -303,8 +318,14 @@
       return { type: 'feed', userId: null };
     }
 
+    // 下部までスクロールしたら自動読み込み
+    const scrollObserver = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && hasMorePosts && !isLoadingMore && !maintenanceActive && oldestPostId !== null) {
+        loadMorePosts();
+      }
+    }, { rootMargin: '250px' });
+
     async function init() {
-      // 手動メンテナンスモード時はDBに一切接続せずお知らせだけ表示
       if (IS_MAINTENANCE) {
         meBar.textContent = 'ステータス：メンテナンス中';
         enterMaintenanceMode(MAINTENANCE_MESSAGE);
@@ -339,6 +360,7 @@
         await Promise.all([fetchBlocks(), fetchMyBads(), fetchMyReposts()]);
 
         setupRealtime();
+        scrollObserver.observe(feedStatus);
         window.addEventListener('hashchange', handleRoute);
         await handleRoute();
       } catch (err) {
@@ -422,14 +444,20 @@
     }
 
     async function handleRoute() {
+      routeToken += 1;
       activeRoute = parseHash();
+      oldestPostId = null;
+      hasMorePosts = true;
+      isLoadingMore = false;
+      feedStatus.textContent = '';
+
       clearComposeTarget();
       renderMeBar();
 
       if (activeRoute.type === 'user') {
-        await renderUserPage(activeRoute.userId);
+        await renderUserPage(activeRoute.userId, routeToken);
       } else {
-        await renderGlobalFeed();
+        await renderGlobalFeed(routeToken);
       }
     }
 
@@ -472,36 +500,91 @@
       }
     }
 
-    async function renderGlobalFeed() {
+    async function renderGlobalFeed(token) {
       viewHeader.innerHTML = '<h3>▼ 全世界タイムライン（全投稿垂れ流し）</h3>';
       feed.textContent = '読み込み中...';
+      await loadMorePosts(true, token);
+    }
 
-      const { data: posts, error } = await sb
+    async function loadMorePosts(isInitial = false, token = routeToken) {
+      if (isLoadingMore || (!isInitial && !hasMorePosts) || maintenanceActive) return;
+      isLoadingMore = true;
+
+      if (!isInitial) {
+        feedStatus.textContent = '過去の投稿を読み込み中...';
+      }
+
+      let query = sb
         .from('posts')
         .select('id, user_id, content, bad_count, created_at, reply_to_id, repost_of_id, quote_of_id')
-        .order('created_at', { ascending: false })
-        .limit(60);
+        .order('id', { ascending: false })
+        .limit(PAGE_SIZE);
+
+      if (activeRoute.type === 'user') {
+        query = query.eq('user_id', activeRoute.userId);
+      }
+      if (!isInitial && oldestPostId !== null) {
+        query = query.lt('id', oldestPostId);
+      }
+
+      const { data: posts, error } = await query;
+
+      // 読み込み中に別ページへ移動していたら破棄
+      if (token !== routeToken) {
+        isLoadingMore = false;
+        return;
+      }
 
       if (error) {
+        isLoadingMore = false;
         if (isMaintenanceError(error)) {
           enterMaintenanceMode(MAINTENANCE_MESSAGE);
-          feed.textContent = '現在メンテナンス中のためタイムラインを表示できません。';
+          if (isInitial) feed.textContent = '現在メンテナンス中のためタイムラインを表示できません。';
           return;
         }
-        feed.textContent = `タイムラインの読み込みに失敗しました: ${error.message}`;
+        if (isInitial) {
+          feed.textContent = `タイムラインの読み込みに失敗しました: ${error.message}`;
+        } else {
+          feedStatus.textContent = '読み込みに失敗しました。';
+        }
         return;
       }
 
       await hydratePostsAndUsers(posts);
-
-      feed.innerHTML = '';
-      const visible = posts.filter(p => !isPostBlocked(p));
-      if (visible.length === 0) {
-        feed.textContent = 'まだ投稿がありません。';
+      if (token !== routeToken) {
+        isLoadingMore = false;
         return;
       }
 
-      visible.forEach(p => feed.appendChild(createPostEl(p)));
+      if (isInitial) {
+        feed.innerHTML = '';
+      }
+
+      if (posts.length > 0) {
+        oldestPostId = posts[posts.length - 1].id;
+      }
+
+      if (posts.length < PAGE_SIZE) {
+        hasMorePosts = false;
+      }
+
+      const visible = posts.filter(p => !isPostBlocked(p));
+      visible.forEach(p => {
+        if (!document.getElementById(`post-${p.id}`)) {
+          feed.appendChild(createPostEl(p));
+        }
+      });
+
+      if (isInitial && feed.children.length === 0) {
+        feed.textContent = 'まだ投稿がありません。';
+        feedStatus.textContent = '';
+      } else if (!hasMorePosts) {
+        feedStatus.textContent = '── これ以上投稿はありません ──';
+      } else {
+        feedStatus.textContent = '下にスクロールしてさらに読み込む';
+      }
+
+      isLoadingMore = false;
     }
 
     function isPostBlocked(post) {
@@ -513,7 +596,7 @@
       return false;
     }
 
-    async function renderUserPage(userId) {
+    async function renderUserPage(userId, token) {
       viewHeader.innerHTML = '<p><a href="#">← 全世界タイムラインに戻る</a></p>';
       feed.textContent = '読み込み中...';
 
@@ -522,6 +605,8 @@
         .select('*')
         .eq('id', userId)
         .maybeSingle();
+
+      if (token !== routeToken) return;
 
       if (userErr) {
         if (isMaintenanceError(userErr)) {
@@ -540,17 +625,17 @@
 
       userCache.set(user.id, user);
 
-      const { data: posts } = await sb
+      // ユーザーの総投稿数と総悪いね数を集計用に取得
+      const { data: allStats } = await sb
         .from('posts')
-        .select('id, user_id, content, bad_count, created_at, reply_to_id, repost_of_id, quote_of_id')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(60);
+        .select('bad_count, repost_of_id')
+        .eq('user_id', userId);
 
-      const postList = posts || [];
-      await hydratePostsAndUsers(postList);
+      if (token !== routeToken) return;
 
-      const totalBads = postList
+      const statRows = allStats || [];
+      const totalPosts = statRows.length;
+      const totalBads = statRows
         .filter(p => !p.repost_of_id)
         .reduce((sum, p) => sum + (p.bad_count || 0), 0);
 
@@ -580,7 +665,7 @@
       }
 
       const statsP = document.createElement('p');
-      statsP.textContent = `投稿数：${postList.length}件 ／ 獲得悪いね合計：${totalBads}`;
+      statsP.textContent = `投稿数：${totalPosts}件 ／ 獲得悪いね合計：${totalBads}`;
       box.appendChild(statsP);
 
       if (user.id === currentUser.id) {
@@ -615,7 +700,7 @@
             currentProfile.name = newName;
             userCache.set(currentUser.id, { ...currentProfile });
             renderMeBar();
-            renderUserPage(userId);
+            handleRoute();
           };
 
           form.append(input, document.createTextNode(' '), saveBtn);
@@ -632,8 +717,10 @@
           const { error } = await sb.from('blocks').insert({ blocker_id: currentUser.id, blocked_id: user.id });
           if (!error) {
             blockedIds.add(user.id);
+            hasMorePosts = false;
             blockBtn.textContent = '🚫 ブロック済み';
             feed.textContent = 'このユーザーはブロック済みです。';
+            feedStatus.textContent = '';
           } else {
             if (isMaintenanceError(error)) {
               enterMaintenanceMode(MAINTENANCE_MESSAGE);
@@ -650,19 +737,14 @@
       listTitle.textContent = '▼ このユーザーの投稿';
       viewHeader.appendChild(listTitle);
 
-      feed.innerHTML = '';
       if (blockedIds.has(user.id)) {
+        hasMorePosts = false;
         feed.textContent = 'このユーザーはブロック済みです。';
-        return;
-      }
-      if (postList.length === 0) {
-        feed.textContent = 'まだ投稿がありません。';
+        feedStatus.textContent = '';
         return;
       }
 
-      postList.forEach(p => {
-        if (!isPostBlocked(p)) feed.appendChild(createPostEl(p));
-      });
+      await loadMorePosts(true, token);
     }
 
     function createPostEl(post) {
