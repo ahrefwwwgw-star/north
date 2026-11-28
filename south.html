@@ -1,3 +1,946 @@
-<title>ＳＯＵＴＨ</title>
-<h1>ＳＯＵＴＨ臨時休業のお知らせ</h1>
-<br>ユーザー数維持やメンテナンスのために一時閉鎖されています。<br>2026/11/29 昼ごろから再開予定です。
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ＳＯＵＴＨ</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .verified-icon {
+      width: 15px;
+      height: 15px;
+      vertical-align: -2px;
+      margin-left: 3px;
+    }
+    .verified-icon-lg {
+      width: 22px;
+      height: 22px;
+      vertical-align: -4px;
+      margin-left: 4px;
+    }
+    .quote-box {
+      border: 1px solid #999999;
+      background: #f8f8f8;
+      padding: 8px;
+      margin: 6px 0;
+    }
+    .reply-ref {
+      font-size: small;
+      color: #555555;
+      margin-bottom: 4px;
+    }
+    .repost-label {
+      font-size: small;
+      color: #444444;
+      margin-bottom: 4px;
+    }
+    .target-banner {
+      background: #ffffff;
+      border: 1px solid #999999;
+      padding: 6px 8px;
+      margin-bottom: 6px;
+      font-size: small;
+    }
+    .fmt-shout {
+      color: red;
+      font-weight: bold;
+      font-size: 1.35em;
+    }
+    .fmt-spoiler {
+      background: #000000;
+      color: #000000;
+      padding: 0 3px;
+      cursor: pointer;
+    }
+    .fmt-spoiler.open {
+      background: #dddddd;
+      color: #000000;
+    }
+    .fmt-rainbow {
+      font-weight: bold;
+      background: linear-gradient(90deg, #e60012, #f39800, #009944, #0068b7, #920783);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+  </style>
+</head>
+<body bgcolor="#eeeeee" text="#000000">
+
+  <!-- 認証バッジSVG用の共通定義 -->
+  <svg style="position:absolute; width:0; height:0; overflow:hidden;" aria-hidden="true">
+    <defs>
+      <linearGradient id="badge-grad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stop-color="#38BDF8" />
+        <stop offset="50%" stop-color="#0284C7" />
+        <stop offset="100%" stop-color="#0369A1" />
+      </linearGradient>
+      <filter id="drop-shadow" x="-10%" y="-10%" width="120%" height="120%">
+        <feDropShadow dx="0" dy="1" stdDeviation="0.8" flood-color="#0369A1" flood-opacity="0.3" />
+      </filter>
+    </defs>
+  </svg>
+
+  <center>
+    <h1><a href="#" style="color: #000000; text-decoration: none;">ＳＯＵＴＨ</a></h1>
+    <p><small>〜不自由の極みＳＮＳ・全員公式認証済〜</small></p>
+  </center>
+
+  <hr>
+
+  <!-- ログイン情報 -->
+  <div id="me-bar">接続中...</div>
+
+  <!-- メンテナンス中に表示されるエリア（凍結パネル風） -->
+  <div id="maintenance-panel" style="display: none; border: 3px solid #cc6600; background: #fff3cd; padding: 10px; margin: 10px 0;">
+    <h2><font color="#cc3300">【メンテナンスのお知らせ】</font></h2>
+    <p>現在ＳＯＵＴＨはメンテナンス中のため、一部またはすべての操作を停止しています。</p>
+    <p>理由：<b id="maintenance-reason"></b></p>
+    <button id="maintenance-reload-btn">再読み込みする</button>
+  </div>
+
+  <!-- 凍結時に表示されるエリア -->
+  <div id="frozen-panel" style="display: none; border: 3px solid red; background: #ffdddd; padding: 10px; margin: 10px 0;">
+    <h2><font color="red">【アカウント凍結のお知らせ】</font></h2>
+    <p>あなたのアカウントは凍結されました。</p>
+    <p>理由：<b id="frozen-reason"></b></p>
+    <button id="reincarnate-btn">諦めて転生する（別アカウントでやり直す）</button>
+  </div>
+
+  <!-- 投稿フォーム -->
+  <div id="composer" style="display: none; margin: 12px 0;">
+    <div id="target-banner" class="target-banner" style="display: none;">
+      <span id="target-banner-text"></span>
+      <button type="button" id="cancel-target-btn">取消</button>
+    </div>
+    <form id="post-form">
+      <input type="text" id="post-input" maxlength="20" size="30" placeholder="20文字まで" autocomplete="off" required>
+      <button type="submit" id="post-btn">失言する</button>
+      <small id="char-count">(0/20)</small>
+      <div style="margin-top: 4px;">
+        <small style="color: #555555;">書式: **太字** ~~打消~~ __下線__ ||伏せ字|| !!赤大!! @@虹@@</small>
+      </div>
+      <div id="post-error" style="color: red; font-size: small;"></div>
+    </form>
+  </div>
+
+  <hr>
+
+  <!-- ページ見出し・プロフィール表示エリア -->
+  <div id="view-header"></div>
+
+  <!-- 投稿一覧エリア -->
+  <div id="feed">読み込み中...</div>
+
+  <script>
+    // ==========================================
+    // ★ここを自分のSupabaseのURLとAnon Keyに書き換えてね
+    // ==========================================
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+    const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+
+    // ★手動でメンテナンス画面に切り替えたいときは true に変更
+    const IS_MAINTENANCE = false;
+    const MAINTENANCE_MESSAGE = '緊急メンテナンスを実施しています。再開までしばらくお待ちください。';
+
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let currentUser = null;
+    let currentProfile = null;
+    let blockedIds = new Set();
+    let votedPostIds = new Set();
+    let repostedPostIds = new Set();
+    let userCache = new Map();
+    let postCache = new Map();
+    let activeRoute = { type: 'feed', userId: null };
+    let composeTarget = null; // { mode: 'reply' | 'quote', post: {...} }
+    let maintenanceActive = IS_MAINTENANCE;
+
+    const meBar = document.getElementById('me-bar');
+    const maintenancePanel = document.getElementById('maintenance-panel');
+    const maintenanceReason = document.getElementById('maintenance-reason');
+    const maintenanceReloadBtn = document.getElementById('maintenance-reload-btn');
+    const frozenPanel = document.getElementById('frozen-panel');
+    const frozenReason = document.getElementById('frozen-reason');
+    const reincarnateBtn = document.getElementById('reincarnate-btn');
+    const composer = document.getElementById('composer');
+    const targetBanner = document.getElementById('target-banner');
+    const targetBannerText = document.getElementById('target-banner-text');
+    const cancelTargetBtn = document.getElementById('cancel-target-btn');
+    const postForm = document.getElementById('post-form');
+    const postInput = document.getElementById('post-input');
+    const postBtn = document.getElementById('post-btn');
+    const postError = document.getElementById('post-error');
+    const charCount = document.getElementById('char-count');
+    const viewHeader = document.getElementById('view-header');
+    const feed = document.getElementById('feed');
+
+    maintenanceReloadBtn.addEventListener('click', () => location.reload());
+
+    function enterMaintenanceMode(reasonText) {
+      maintenanceActive = true;
+      maintenancePanel.style.display = 'block';
+      maintenanceReason.textContent = reasonText || MAINTENANCE_MESSAGE;
+      composer.style.display = 'none';
+    }
+
+    // DBの権限剥奪(revoke)やAPI遮断(Exposed schemas削除/Pause)を検知
+    function isMaintenanceError(error) {
+      if (!error) return false;
+      const code = String(error.code || '');
+      const msg = String(error.message || '').toLowerCase();
+      return (
+        code === '42501' ||
+        code === 'PGRST106' ||
+        msg.includes('permission denied') ||
+        msg.includes('schema must be one of') ||
+        msg.includes('failed to fetch')
+      );
+    }
+
+    function createBadgeEl(isFrozen, isLarge = false) {
+      if (isFrozen) {
+        const small = document.createElement('small');
+        small.style.color = 'red';
+        small.textContent = ' [凍結済]';
+        return small;
+      }
+      const span = document.createElement('span');
+      const cls = isLarge ? 'verified-icon-lg' : 'verified-icon';
+      span.innerHTML = `
+        <svg class="${cls}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-label="認証済み">
+          <path d="M12 1.5L14.65 3.18L17.75 2.76L19.06 5.61L21.84 7.08L21.31 10.17L22.89 12.88L20.73 15.17L20.57 18.3L17.52 19.04L15.61 21.52L12.66 20.43L9.71 21.52L7.8 19.04L4.75 18.3L4.59 15.17L2.43 12.88L4.01 10.17L3.48 7.08L6.26 5.61L7.57 2.76L10.67 3.18L12 1.5Z" fill="url(#badge-grad)" filter="url(#drop-shadow)" />
+          <circle cx="12" cy="12" r="7.5" stroke="#FFFFFF" stroke-opacity="0.2" stroke-width="0.75" />
+          <path d="M8.5 12.3L10.8 14.6L15.8 9.4" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      `;
+      return span;
+    }
+
+    // 安全なミニ書式パーサー（XSS・レイアウト破壊を完全防止）
+    function renderFormattedText(text) {
+      const frag = document.createDocumentFragment();
+      if (!text) return frag;
+
+      const pattern = /!!([^!]+)!!|\*\*([^*]+)\*\*|~~([^~]+)~~|__([^_]+)__|\|\|([^|]+)\|\||@@([^@]+)@@/g;
+      let lastIndex = 0;
+      let match;
+
+      while ((match = pattern.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+          frag.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+        }
+
+        let el;
+        if (match[1] !== undefined) {
+          el = document.createElement('span');
+          el.className = 'fmt-shout';
+          el.textContent = match[1];
+        } else if (match[2] !== undefined) {
+          el = document.createElement('b');
+          el.textContent = match[2];
+        } else if (match[3] !== undefined) {
+          el = document.createElement('s');
+          el.textContent = match[3];
+        } else if (match[4] !== undefined) {
+          el = document.createElement('u');
+          el.textContent = match[4];
+        } else if (match[5] !== undefined) {
+          el = document.createElement('span');
+          el.className = 'fmt-spoiler';
+          el.title = 'クリックで表示';
+          el.textContent = match[5];
+          el.onclick = () => el.classList.toggle('open');
+        } else if (match[6] !== undefined) {
+          el = document.createElement('span');
+          el.className = 'fmt-rainbow';
+          el.textContent = match[6];
+        }
+
+        frag.appendChild(el);
+        lastIndex = pattern.lastIndex;
+      }
+
+      if (lastIndex < text.length) {
+        frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+      }
+      return frag;
+    }
+
+    function setComposeTarget(mode, post) {
+      if (maintenanceActive) return alert('現在メンテナンス中のため操作できません。');
+      if (currentProfile?.is_frozen) return alert('凍結されているため操作できません。');
+      composeTarget = { mode, post };
+      const u = userCache.get(post.user_id) || { name: '名無しの公式' };
+      const label = mode === 'reply' ? '返信先' : '引用元';
+      targetBannerText.textContent = `${label}：${u.name}「${post.content}」 `;
+      targetBanner.style.display = 'block';
+      composer.style.display = 'block';
+      postInput.focus();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function clearComposeTarget() {
+      composeTarget = null;
+      targetBanner.style.display = 'none';
+      targetBannerText.textContent = '';
+      if (maintenanceActive || activeRoute.type !== 'feed' || currentProfile?.is_frozen) {
+        composer.style.display = 'none';
+      }
+    }
+
+    cancelTargetBtn.addEventListener('click', clearComposeTarget);
+
+    postInput.addEventListener('input', () => {
+      charCount.textContent = `(${postInput.value.length}/20)`;
+      postError.textContent = '';
+    });
+
+    function parseHash() {
+      const hash = location.hash || '';
+      const match = hash.match(/^#u=([0-9a-f-]+)$/i);
+      if (match) {
+        return { type: 'user', userId: match[1] };
+      }
+      return { type: 'feed', userId: null };
+    }
+
+    async function init() {
+      // 手動メンテナンスモード時はDBに一切接続せずお知らせだけ表示
+      if (IS_MAINTENANCE) {
+        meBar.textContent = 'ステータス：メンテナンス中';
+        enterMaintenanceMode(MAINTENANCE_MESSAGE);
+        viewHeader.innerHTML = '';
+        feed.textContent = 'メンテナンス終了までしばらくお待ちください。';
+        return;
+      }
+
+      try {
+        let { data: { session }, error: sessErr } = await sb.auth.getSession();
+        if (sessErr) throw sessErr;
+
+        if (!session) {
+          const { data, error } = await sb.auth.signInAnonymously();
+          if (error) {
+            if (isMaintenanceError(error)) {
+              meBar.textContent = 'ステータス：メンテナンス中';
+              enterMaintenanceMode(MAINTENANCE_MESSAGE);
+              feed.textContent = 'メンテナンス終了までしばらくお待ちください。';
+              return;
+            }
+            meBar.textContent = 'ログインエラー: ' + error.message;
+            return;
+          }
+          session = data.session;
+        }
+        currentUser = session.user;
+
+        await fetchMyProfile();
+        if (maintenanceActive) return;
+
+        await Promise.all([fetchBlocks(), fetchMyBads(), fetchMyReposts()]);
+
+        setupRealtime();
+        window.addEventListener('hashchange', handleRoute);
+        await handleRoute();
+      } catch (err) {
+        meBar.textContent = 'ステータス：メンテナンス中';
+        enterMaintenanceMode(MAINTENANCE_MESSAGE);
+        feed.textContent = 'サーバーに接続できませんでした。メンテナンス中の可能性があります。';
+      }
+    }
+
+    async function fetchMyProfile() {
+      for (let i = 0; i < 6; i++) {
+        const { data, error } = await sb
+          .from('users')
+          .select('*')
+          .eq('id', currentUser.id)
+          .maybeSingle();
+
+        if (error) {
+          if (isMaintenanceError(error)) {
+            meBar.textContent = 'ステータス：メンテナンス中';
+            enterMaintenanceMode(MAINTENANCE_MESSAGE);
+            feed.textContent = '現在メンテナンス中のためタイムラインを表示できません。';
+          }
+          console.error(error);
+          return;
+        }
+        if (data) {
+          currentProfile = data;
+          userCache.set(data.id, data);
+          renderMeBar();
+          return;
+        }
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+
+    function renderMeBar() {
+      if (!currentProfile) return;
+      meBar.innerHTML = '';
+
+      meBar.appendChild(document.createTextNode('ログイン中：'));
+      const link = document.createElement('a');
+      link.href = `#u=${currentProfile.id}`;
+      link.textContent = currentProfile.name;
+      meBar.appendChild(link);
+      meBar.appendChild(createBadgeEl(currentProfile.is_frozen));
+
+      if (maintenanceActive) {
+        composer.style.display = 'none';
+      }
+
+      if (currentProfile.is_frozen) {
+        frozenPanel.style.display = 'block';
+        frozenReason.textContent = currentProfile.freeze_reason || '利用規約違反';
+        composer.style.display = 'none';
+      } else {
+        frozenPanel.style.display = 'none';
+        if (!maintenanceActive) {
+          composer.style.display = (activeRoute.type === 'feed' || composeTarget) ? 'block' : 'none';
+        }
+      }
+    }
+
+    async function fetchBlocks() {
+      const { data } = await sb.from('blocks').select('blocked_id').eq('blocker_id', currentUser.id);
+      if (data) blockedIds = new Set(data.map(b => b.blocked_id));
+    }
+
+    async function fetchMyBads() {
+      const { data } = await sb.from('bads').select('post_id').eq('user_id', currentUser.id);
+      if (data) votedPostIds = new Set(data.map(b => b.post_id));
+    }
+
+    async function fetchMyReposts() {
+      const { data } = await sb
+        .from('posts')
+        .select('repost_of_id')
+        .eq('user_id', currentUser.id)
+        .not('repost_of_id', 'is', null);
+      if (data) repostedPostIds = new Set(data.map(r => r.repost_of_id));
+    }
+
+    async function handleRoute() {
+      activeRoute = parseHash();
+      clearComposeTarget();
+      renderMeBar();
+
+      if (activeRoute.type === 'user') {
+        await renderUserPage(activeRoute.userId);
+      } else {
+        await renderGlobalFeed();
+      }
+    }
+
+    async function hydratePostsAndUsers(posts) {
+      posts.forEach(p => postCache.set(p.id, p));
+
+      const refIds = new Set();
+      posts.forEach(p => {
+        if (p.reply_to_id && !postCache.has(p.reply_to_id)) refIds.add(p.reply_to_id);
+        if (p.repost_of_id && !postCache.has(p.repost_of_id)) refIds.add(p.repost_of_id);
+        if (p.quote_of_id && !postCache.has(p.quote_of_id)) refIds.add(p.quote_of_id);
+      });
+
+      if (refIds.size > 0) {
+        const { data: refPosts } = await sb
+          .from('posts')
+          .select('id, user_id, content, bad_count, created_at, reply_to_id, repost_of_id, quote_of_id')
+          .in('id', [...refIds]);
+        if (refPosts) {
+          refPosts.forEach(rp => postCache.set(rp.id, rp));
+        }
+      }
+
+      const userIds = new Set();
+      posts.forEach(p => {
+        userIds.add(p.user_id);
+        [p.reply_to_id, p.repost_of_id, p.quote_of_id].forEach(rid => {
+          const rp = postCache.get(rid);
+          if (rp) userIds.add(rp.user_id);
+        });
+      });
+
+      const missingUsers = [...userIds].filter(id => !userCache.has(id));
+      if (missingUsers.length > 0) {
+        const { data: users } = await sb
+          .from('users')
+          .select('id, name, is_verified, is_frozen')
+          .in('id', missingUsers);
+        if (users) users.forEach(u => userCache.set(u.id, u));
+      }
+    }
+
+    async function renderGlobalFeed() {
+      viewHeader.innerHTML = '<h3>▼ 全世界タイムライン（全投稿垂れ流し）</h3>';
+      feed.textContent = '読み込み中...';
+
+      const { data: posts, error } = await sb
+        .from('posts')
+        .select('id, user_id, content, bad_count, created_at, reply_to_id, repost_of_id, quote_of_id')
+        .order('created_at', { ascending: false })
+        .limit(60);
+
+      if (error) {
+        if (isMaintenanceError(error)) {
+          enterMaintenanceMode(MAINTENANCE_MESSAGE);
+          feed.textContent = '現在メンテナンス中のためタイムラインを表示できません。';
+          return;
+        }
+        feed.textContent = `タイムラインの読み込みに失敗しました: ${error.message}`;
+        return;
+      }
+
+      await hydratePostsAndUsers(posts);
+
+      feed.innerHTML = '';
+      const visible = posts.filter(p => !isPostBlocked(p));
+      if (visible.length === 0) {
+        feed.textContent = 'まだ投稿がありません。';
+        return;
+      }
+
+      visible.forEach(p => feed.appendChild(createPostEl(p)));
+    }
+
+    function isPostBlocked(post) {
+      if (blockedIds.has(post.user_id)) return true;
+      if (post.repost_of_id) {
+        const orig = postCache.get(post.repost_of_id);
+        if (orig && blockedIds.has(orig.user_id)) return true;
+      }
+      return false;
+    }
+
+    async function renderUserPage(userId) {
+      viewHeader.innerHTML = '<p><a href="#">← 全世界タイムラインに戻る</a></p>';
+      feed.textContent = '読み込み中...';
+
+      const { data: user, error: userErr } = await sb
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (userErr) {
+        if (isMaintenanceError(userErr)) {
+          enterMaintenanceMode(MAINTENANCE_MESSAGE);
+          feed.textContent = '現在メンテナンス中のため表示できません。';
+          return;
+        }
+        feed.textContent = 'ユーザーの読み込みに失敗しました。';
+        return;
+      }
+
+      if (!user) {
+        feed.textContent = 'ユーザーが見つかりませんでした。';
+        return;
+      }
+
+      userCache.set(user.id, user);
+
+      const { data: posts } = await sb
+        .from('posts')
+        .select('id, user_id, content, bad_count, created_at, reply_to_id, repost_of_id, quote_of_id')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(60);
+
+      const postList = posts || [];
+      await hydratePostsAndUsers(postList);
+
+      const totalBads = postList
+        .filter(p => !p.repost_of_id)
+        .reduce((sum, p) => sum + (p.bad_count || 0), 0);
+
+      const box = document.createElement('div');
+      box.style.background = '#ffffff';
+      box.style.border = '1px solid #999999';
+      box.style.padding = '12px';
+      box.style.marginBottom = '16px';
+
+      const h2 = document.createElement('h2');
+      h2.style.margin = '0 0 6px 0';
+      h2.textContent = user.name;
+      h2.appendChild(createBadgeEl(user.is_frozen, true));
+      box.appendChild(h2);
+
+      const idLine = document.createElement('div');
+      const idSmall = document.createElement('small');
+      idSmall.textContent = `ID: ${user.id}`;
+      idLine.appendChild(idSmall);
+      box.appendChild(idLine);
+
+      if (user.is_frozen && user.freeze_reason) {
+        const reasonP = document.createElement('p');
+        reasonP.style.color = 'red';
+        reasonP.textContent = `凍結理由：${user.freeze_reason}`;
+        box.appendChild(reasonP);
+      }
+
+      const statsP = document.createElement('p');
+      statsP.textContent = `投稿数：${postList.length}件 ／ 獲得悪いね合計：${totalBads}`;
+      box.appendChild(statsP);
+
+      if (user.id === currentUser.id) {
+        if (!currentProfile?.is_frozen && !maintenanceActive) {
+          const form = document.createElement('form');
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.maxLength = 10;
+          input.value = user.name;
+          input.placeholder = '名前（10文字まで）';
+          input.required = true;
+
+          const saveBtn = document.createElement('button');
+          saveBtn.type = 'submit';
+          saveBtn.textContent = '名前を変更';
+
+          form.onsubmit = async (e) => {
+            e.preventDefault();
+            const newName = input.value.trim();
+            if (!newName || newName.length > 10) return;
+            saveBtn.disabled = true;
+            const { error } = await sb.from('users').update({ name: newName }).eq('id', currentUser.id);
+            saveBtn.disabled = false;
+            if (error) {
+              if (isMaintenanceError(error)) {
+                enterMaintenanceMode(MAINTENANCE_MESSAGE);
+              } else {
+                alert('名前を変更できませんでした：' + error.message);
+              }
+              return;
+            }
+            currentProfile.name = newName;
+            userCache.set(currentUser.id, { ...currentProfile });
+            renderMeBar();
+            renderUserPage(userId);
+          };
+
+          form.append(input, document.createTextNode(' '), saveBtn);
+          box.appendChild(form);
+        }
+      } else {
+        const isBlocked = blockedIds.has(user.id);
+        const blockBtn = document.createElement('button');
+        blockBtn.textContent = isBlocked ? '🚫 ブロック済み' : '🚫 このユーザーをブロック';
+        blockBtn.disabled = isBlocked || currentProfile?.is_frozen || maintenanceActive;
+        blockBtn.onclick = async () => {
+          if (!confirm(`${user.name} をブロックしますか？（二度と見えなくなります）`)) return;
+          blockBtn.disabled = true;
+          const { error } = await sb.from('blocks').insert({ blocker_id: currentUser.id, blocked_id: user.id });
+          if (!error) {
+            blockedIds.add(user.id);
+            blockBtn.textContent = '🚫 ブロック済み';
+            feed.textContent = 'このユーザーはブロック済みです。';
+          } else {
+            if (isMaintenanceError(error)) {
+              enterMaintenanceMode(MAINTENANCE_MESSAGE);
+            }
+            blockBtn.disabled = false;
+          }
+        };
+        box.appendChild(blockBtn);
+      }
+
+      viewHeader.appendChild(box);
+
+      const listTitle = document.createElement('h3');
+      listTitle.textContent = '▼ このユーザーの投稿';
+      viewHeader.appendChild(listTitle);
+
+      feed.innerHTML = '';
+      if (blockedIds.has(user.id)) {
+        feed.textContent = 'このユーザーはブロック済みです。';
+        return;
+      }
+      if (postList.length === 0) {
+        feed.textContent = 'まだ投稿がありません。';
+        return;
+      }
+
+      postList.forEach(p => {
+        if (!isPostBlocked(p)) feed.appendChild(createPostEl(p));
+      });
+    }
+
+    function createPostEl(post) {
+      const wrapper = document.createElement('div');
+      wrapper.id = `post-${post.id}`;
+      wrapper.dataset.userId = post.user_id;
+
+      let displayPost = post;
+      if (post.repost_of_id) {
+        const reposter = userCache.get(post.user_id) || { name: '名無しの公式' };
+        const label = document.createElement('div');
+        label.className = 'repost-label';
+        label.appendChild(document.createTextNode('🔁 '));
+        const rLink = document.createElement('a');
+        rLink.href = `#u=${post.user_id}`;
+        rLink.textContent = reposter.name;
+        label.appendChild(rLink);
+        label.appendChild(document.createTextNode(' がリポスト'));
+        wrapper.appendChild(label);
+
+        const orig = postCache.get(post.repost_of_id);
+        if (!orig) {
+          const deleted = document.createElement('p');
+          deleted.style.color = '#777';
+          deleted.textContent = '（元の投稿は削除されました）';
+          wrapper.append(deleted, document.createElement('hr'));
+          return wrapper;
+        }
+        displayPost = orig;
+      }
+
+      const user = userCache.get(displayPost.user_id) || { name: '名無しの公式', is_verified: true, is_frozen: false };
+
+      if (displayPost.reply_to_id) {
+        const parent = postCache.get(displayPost.reply_to_id);
+        const replyDiv = document.createElement('div');
+        replyDiv.className = 'reply-ref';
+        if (parent) {
+          const pUser = userCache.get(parent.user_id) || { name: '名無しの公式' };
+          replyDiv.textContent = `↳ ${pUser.name} への返信：「${parent.content}」`;
+        } else {
+          replyDiv.textContent = '↳ 削除された投稿への返信';
+        }
+        wrapper.appendChild(replyDiv);
+      }
+
+      const header = document.createElement('div');
+      const nameLink = document.createElement('a');
+      nameLink.href = `#u=${displayPost.user_id}`;
+      const nameB = document.createElement('b');
+      nameB.textContent = user.name;
+      nameLink.appendChild(nameB);
+      header.appendChild(nameLink);
+      header.appendChild(createBadgeEl(user.is_frozen));
+
+      const time = document.createElement('small');
+      time.textContent = ` (${new Date(displayPost.created_at).toLocaleString()})`;
+      header.appendChild(time);
+      wrapper.appendChild(header);
+
+      const body = document.createElement('p');
+      body.style.margin = '6px 0';
+      body.appendChild(renderFormattedText(displayPost.content));
+      wrapper.appendChild(body);
+
+      if (displayPost.quote_of_id) {
+        const quoted = postCache.get(displayPost.quote_of_id);
+        const qBox = document.createElement('div');
+        qBox.className = 'quote-box';
+        if (quoted && !blockedIds.has(quoted.user_id)) {
+          const qUser = userCache.get(quoted.user_id) || { name: '名無しの公式', is_frozen: false };
+          const qHead = document.createElement('div');
+          const qLink = document.createElement('a');
+          qLink.href = `#u=${quoted.user_id}`;
+          const qB = document.createElement('b');
+          qB.textContent = qUser.name;
+          qLink.appendChild(qB);
+          qHead.appendChild(qLink);
+          qHead.appendChild(createBadgeEl(qUser.is_frozen));
+
+          const qBody = document.createElement('div');
+          qBody.style.marginTop = '4px';
+          qBody.appendChild(renderFormattedText(quoted.content));
+          qBox.append(qHead, qBody);
+        } else {
+          qBox.style.color = '#777';
+          qBox.textContent = '（引用元の投稿を表示できません）';
+        }
+        wrapper.appendChild(qBox);
+      }
+
+      const actions = document.createElement('div');
+
+      const voted = votedPostIds.has(displayPost.id);
+      const badBtn = document.createElement('button');
+      badBtn.dataset.badPostId = displayPost.id;
+      badBtn.disabled = voted;
+      badBtn.textContent = voted ? `👎 悪いね済 (${displayPost.bad_count})` : `👎 悪いね (${displayPost.bad_count})`;
+      badBtn.onclick = async () => {
+        if (maintenanceActive) return alert('現在メンテナンス中のため操作できません。');
+        if (currentProfile?.is_frozen) return alert('凍結されているため操作できません。');
+        badBtn.disabled = true;
+        const { error } = await sb.from('bads').insert({ user_id: currentUser.id, post_id: displayPost.id });
+        if (!error) {
+          votedPostIds.add(displayPost.id);
+          displayPost.bad_count += 1;
+          updateBadButtons(displayPost.id, displayPost.bad_count);
+        } else {
+          if (isMaintenanceError(error)) {
+            enterMaintenanceMode(MAINTENANCE_MESSAGE);
+          }
+          badBtn.disabled = false;
+        }
+      };
+      actions.appendChild(badBtn);
+
+      actions.appendChild(document.createTextNode(' '));
+      const replyBtn = document.createElement('button');
+      replyBtn.textContent = '💬 返信';
+      replyBtn.onclick = () => setComposeTarget('reply', displayPost);
+      actions.appendChild(replyBtn);
+
+      actions.appendChild(document.createTextNode(' '));
+      const alreadyReposted = repostedPostIds.has(displayPost.id);
+      const repostBtn = document.createElement('button');
+      repostBtn.dataset.repostPostId = displayPost.id;
+      repostBtn.disabled = alreadyReposted;
+      repostBtn.textContent = alreadyReposted ? '🔁 リポスト済' : '🔁 リポスト';
+      repostBtn.onclick = async () => {
+        if (maintenanceActive) return alert('現在メンテナンス中のため操作できません。');
+        if (currentProfile?.is_frozen) return alert('凍結されているため操作できません。');
+        if (!confirm('この投稿をリポストしますか？')) return;
+        repostBtn.disabled = true;
+        const { error } = await sb.from('posts').insert({
+          user_id: currentUser.id,
+          content: null,
+          repost_of_id: displayPost.id
+        });
+        if (!error) {
+          repostedPostIds.add(displayPost.id);
+          document.querySelectorAll(`[data-repost-post-id="${displayPost.id}"]`).forEach(b => {
+            b.disabled = true;
+            b.textContent = '🔁 リポスト済';
+          });
+        } else {
+          if (isMaintenanceError(error)) {
+            enterMaintenanceMode(MAINTENANCE_MESSAGE);
+          } else {
+            alert('リポストできませんでした：' + error.message);
+          }
+          repostBtn.disabled = false;
+        }
+      };
+      actions.appendChild(repostBtn);
+
+      actions.appendChild(document.createTextNode(' '));
+      const quoteBtn = document.createElement('button');
+      quoteBtn.textContent = '📝 引用';
+      quoteBtn.onclick = () => setComposeTarget('quote', displayPost);
+      actions.appendChild(quoteBtn);
+
+      if (displayPost.user_id !== currentUser.id && activeRoute.type === 'feed') {
+        actions.appendChild(document.createTextNode(' '));
+        const blockBtn = document.createElement('button');
+        blockBtn.textContent = '🚫 ブロック';
+        blockBtn.onclick = async () => {
+          if (maintenanceActive) return alert('現在メンテナンス中のため操作できません。');
+          if (currentProfile?.is_frozen) return alert('凍結されているため操作できません。');
+          if (!confirm(`${user.name} をブロックしますか？（二度と見えなくなります）`)) return;
+          blockBtn.disabled = true;
+          const { error } = await sb.from('blocks').insert({ blocker_id: currentUser.id, blocked_id: displayPost.user_id });
+          if (!error) {
+            blockedIds.add(displayPost.user_id);
+            document.querySelectorAll(`[data-user-id="${displayPost.user_id}"]`).forEach(el => el.remove());
+          } else {
+            if (isMaintenanceError(error)) {
+              enterMaintenanceMode(MAINTENANCE_MESSAGE);
+            }
+            blockBtn.disabled = false;
+          }
+        };
+        actions.appendChild(blockBtn);
+      }
+
+      wrapper.append(actions, document.createElement('hr'));
+      return wrapper;
+    }
+
+    function updateBadButtons(postId, count) {
+      const voted = votedPostIds.has(postId);
+      document.querySelectorAll(`[data-bad-post-id="${postId}"]`).forEach(btn => {
+        btn.disabled = voted;
+        btn.textContent = voted ? `👎 悪いね済 (${count})` : `👎 悪いね (${count})`;
+      });
+    }
+
+    postForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (maintenanceActive) return;
+      const content = postInput.value.trim();
+      if (!content || content.length > 20) return;
+
+      postBtn.disabled = true;
+      postError.textContent = '';
+
+      const payload = {
+        user_id: currentUser.id,
+        content
+      };
+      if (composeTarget?.mode === 'reply') {
+        payload.reply_to_id = composeTarget.post.id;
+      } else if (composeTarget?.mode === 'quote') {
+        payload.quote_of_id = composeTarget.post.id;
+      }
+
+      const { error } = await sb.from('posts').insert(payload);
+
+      postInput.value = '';
+      charCount.textContent = '(0/20)';
+      postBtn.disabled = false;
+
+      if (error) {
+        if (isMaintenanceError(error)) {
+          enterMaintenanceMode(MAINTENANCE_MESSAGE);
+        } else {
+          postError.textContent = '投稿エラー：' + error.message;
+        }
+      } else {
+        clearComposeTarget();
+      }
+
+      await fetchMyProfile();
+    });
+
+    reincarnateBtn.addEventListener('click', async () => {
+      reincarnateBtn.disabled = true;
+      await sb.auth.signOut();
+      location.hash = '';
+      location.reload();
+    });
+
+    function setupRealtime() {
+      sb.channel('public:posts')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, async (payload) => {
+          const newPost = payload.new;
+          await hydratePostsAndUsers([newPost]);
+
+          if (isPostBlocked(newPost)) return;
+          if (activeRoute.type === 'user' && activeRoute.userId !== newPost.user_id) return;
+
+          if (feed.children.length === 0) {
+            feed.innerHTML = '';
+          }
+
+          if (!document.getElementById(`post-${newPost.id}`)) {
+            feed.prepend(createPostEl(newPost));
+          }
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'posts' }, (payload) => {
+          const updated = payload.new;
+          const cached = postCache.get(updated.id);
+          if (cached) cached.bad_count = updated.bad_count;
+          updateBadButtons(updated.id, updated.bad_count);
+        })
+        .subscribe();
+
+      sb.channel('public:users')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${currentUser.id}` }, (payload) => {
+          currentProfile = payload.new;
+          userCache.set(currentProfile.id, currentProfile);
+          renderMeBar();
+        })
+        .subscribe();
+    }
+
+    init();
+  </script>
+</body>
+</html>
