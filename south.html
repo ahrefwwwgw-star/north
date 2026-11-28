@@ -133,15 +133,13 @@
   <div id="feed">読み込み中...</div>
 
   <script>
-    // ==========================================
-    // ★ここを自分のSupabaseのURLとAnon Keyに書き換えてね
-    // ==========================================
-    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-    const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+
+    const SUPABASE_URL = 'https://zmpdkrenhkkklpdzidsr.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_GxAg9kYupXy2RKPLi5N3ng_BE64y_Sg';
 
     // ★手動でメンテナンス画面に切り替えたいときは true に変更
     const IS_MAINTENANCE = false;
-    const MAINTENANCE_MESSAGE = '緊急メンテナンスを実施しています。再開までしばらくお待ちください。';
+    const MAINTENANCE_MESSAGE = 'メンテナンスを実施しています。再開までしばらくお待ちください。';
 
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
